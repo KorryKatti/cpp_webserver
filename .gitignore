@@ -30,3 +30,24 @@
 *.exe
 *.out
 *.app
+
+# build folders
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Visual Studio
+*.sln
+*.vcxproj*
+*.pdb
+*.idb
+*.obj
+
+# Executables
+*.exe
+
+# Misc
+*.log
+
