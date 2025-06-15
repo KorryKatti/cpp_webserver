@@ -4,7 +4,7 @@
 #define fast_io std::ios::sync_with_stdio(false); std::cin.tie(nullptr);
 constexpr size_t MAX_FILE_SIZE = 6 * 1024 * 1024; // 6 MB
 
-// 🔧 CORS middleware
+// 🔧 CORS middleware - FIXED
 struct CORS {
     struct context {};
     void before_handle(crow::request&, crow::response& res, context&) {
@@ -13,7 +13,8 @@ struct CORS {
         res.add_header("Access-Control-Allow-Headers", "Content-Type, Content-Length");
     }
     void after_handle(crow::request&, crow::response& res, context&) {
-        res.add_header("Access-Control-Allow-Origin", "*");
+        // Removed duplicate Access-Control-Allow-Origin header
+        // Only set it once in before_handle
     }
 };
 
@@ -48,31 +49,24 @@ int main() {
         return std::to_string(a + b) + "\n";
     });
 
-    // ✅ OPTIONS preflight
+    // ✅ OPTIONS preflight - Removed manual CORS headers since middleware handles it
     CROW_ROUTE(app, "/upload").methods(crow::HTTPMethod::OPTIONS)
     ([](const crow::request&, crow::response& res){
         res.code = 204;
-        res.add_header("Access-Control-Allow-Origin", "*");
-        res.add_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PATCH");
-        res.add_header("Access-Control-Allow-Headers", "Content-Type, Content-Length");
         res.end();
     });
 
-    // ✅ File upload
+    // ✅ File upload - Removed manual CORS headers since middleware handles it
     CROW_ROUTE(app, "/upload").methods(crow::HTTPMethod::POST)
     ([](const crow::request& req) {
         auto content_length_header = req.get_header_value("Content-Length");
         if (content_length_header.empty()) {
-            crow::response res(411, "No data received\n");
-            res.add_header("Access-Control-Allow-Origin", "*");
-            return res;
+            return crow::response(411, "No data received\n");
         }
 
         size_t content_length = std::stoul(content_length_header);
         if (content_length > MAX_FILE_SIZE) {
-            crow::response res(413, "File too large, max file size is 6MB\n");
-            res.add_header("Access-Control-Allow-Origin", "*");
-            return res;
+            return crow::response(413, "File too large, max file size is 6MB\n");
         }
 
         std::string id = generate_id();
@@ -88,13 +82,11 @@ int main() {
         std::string base_url = req.get_header_value("Host");
         if (base_url.empty()) base_url = "localhost:18080";
 
-        std::string full_url = "http://" + base_url + "/uploads/" + id + "\n";
-        crow::response res(200, full_url);
-        res.add_header("Access-Control-Allow-Origin", "*");
-        return res;
+        std::string full_url = "https://" + base_url + "/uploads/" + id + "\n";
+        return crow::response(200, full_url);
     });
 
-    // ✅ File serve
+    // ✅ File serve - Removed manual CORS headers since middleware handles it
     CROW_ROUTE(app, "/uploads/<string>").methods(crow::HTTPMethod::GET)
     ([](const crow::request& req, std::string id) {
         auto it = files.find(id);
@@ -112,7 +104,6 @@ int main() {
         crow::response res(200);
         res.body = content;
         res.add_header("Content-Type", "application/octet-stream");
-        res.add_header("Access-Control-Allow-Origin", "*");
         return res;
     });
 
