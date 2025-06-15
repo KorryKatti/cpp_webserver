@@ -7,13 +7,13 @@ constexpr size_t MAX_FILE_SIZE = 6 * 1024 * 1024; // 6 MB
 // 🔧 CORS middleware
 struct CORS {
     struct context {};
-    void before_handle(crow::request& req, crow::response& res, context&) {
+    void before_handle(crow::request&, crow::response& res, context&) {
         res.add_header("Access-Control-Allow-Origin", "*");
         res.add_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PATCH");
         res.add_header("Access-Control-Allow-Headers", "Content-Type, Content-Length");
     }
     void after_handle(crow::request&, crow::response& res, context&) {
-        // no-op
+        res.add_header("Access-Control-Allow-Origin", "*");
     }
 };
 
@@ -23,7 +23,6 @@ std::string generate_id(size_t len = 12) {
         "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     static thread_local std::mt19937 gen(std::random_device{}());
     static thread_local std::uniform_int_distribution<> dist(0, sizeof(alphanum) - 2);
-
     std::string id;
     id.reserve(len);
     for (size_t i = 0; i < len; ++i) id += alphanum[dist(gen)];
@@ -38,37 +37,43 @@ int main() {
     if (!std::filesystem::exists("uploads"))
         std::filesystem::create_directory("uploads");
 
-    // 🚀 apply middleware
     crow::App<CORS> app;
 
-    // 🌐 basic route
     CROW_ROUTE(app, "/")([] {
         return "server online\n";
     });
 
-    // ➕ add route
     CROW_ROUTE(app, "/add/<int>/<int>").methods(crow::HTTPMethod::GET, crow::HTTPMethod::PATCH)
     ([](int a, int b) {
         return std::to_string(a + b) + "\n";
     });
 
-    // 🧽 handle OPTIONS preflight
+    // ✅ OPTIONS preflight
     CROW_ROUTE(app, "/upload").methods(crow::HTTPMethod::OPTIONS)
     ([](const crow::request&, crow::response& res){
         res.code = 204;
+        res.add_header("Access-Control-Allow-Origin", "*");
+        res.add_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PATCH");
+        res.add_header("Access-Control-Allow-Headers", "Content-Type, Content-Length");
         res.end();
     });
 
-    // 💾 file upload
+    // ✅ File upload
     CROW_ROUTE(app, "/upload").methods(crow::HTTPMethod::POST)
     ([](const crow::request& req) {
         auto content_length_header = req.get_header_value("Content-Length");
-        if (content_length_header.empty())
-            return crow::response(411, "No data received\n");
+        if (content_length_header.empty()) {
+            crow::response res(411, "No data received\n");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
+        }
 
         size_t content_length = std::stoul(content_length_header);
-        if (content_length > MAX_FILE_SIZE)
-            return crow::response(413, "File too large, max file size is 6MB\n");
+        if (content_length > MAX_FILE_SIZE) {
+            crow::response res(413, "File too large, max file size is 6MB\n");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
+        }
 
         std::string id = generate_id();
         std::string path = "uploads/" + id;
@@ -84,10 +89,12 @@ int main() {
         if (base_url.empty()) base_url = "localhost:18080";
 
         std::string full_url = "http://" + base_url + "/uploads/" + id + "\n";
-        return crow::response(200, full_url);
+        crow::response res(200, full_url);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
     });
 
-    // 📤 serve file
+    // ✅ File serve
     CROW_ROUTE(app, "/uploads/<string>").methods(crow::HTTPMethod::GET)
     ([](const crow::request& req, std::string id) {
         auto it = files.find(id);
@@ -105,10 +112,11 @@ int main() {
         crow::response res(200);
         res.body = content;
         res.add_header("Content-Type", "application/octet-stream");
+        res.add_header("Access-Control-Allow-Origin", "*");
         return res;
     });
 
-    // 🧹 cleanup expired
+    // ✅ Expired file cleanup
     CROW_ROUTE(app, "/checker").methods(crow::HTTPMethod::GET)
     ([](const crow::request&) {
         auto now = std::chrono::system_clock::now();
